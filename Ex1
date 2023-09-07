@@ -1,0 +1,66 @@
+import numpy as np
+import math as m
+
+V0=8
+R=31
+rho=1.225
+omega=2.61
+pitch=-3*m.pi/180
+beta=2*m.pi/180
+
+c=0.5
+Cl=0.5
+Cd=0.01
+eps=1e-5
+r = 24.5
+B=3
+
+def find_a(r, omega, pitch, beta, c, Cl, Cd,eps,B,typ):
+    theta = beta + pitch
+    TSR = omega * R /V0
+    if typ=='W':ac=0.2
+    else : ac=1/3
+    solidity=(c*B/(2*m.pi*r))
+
+    a_new=0
+    a_prime_new=0
+    a_old=0
+    a_prime_old=0
+
+    while a_new==0 or abs(a_new - a_old)>eps or abs(a_prime_new - a_prime_old)>eps:
+    
+        
+
+        phi=np.arctan(((1-a_old)*V0)/((1+a_prime_old)*omega*r))
+
+        alpha = phi - theta
+
+        Cn = Cl*np.cos(phi)+Cd*np.sin(phi)
+        Ct = Cl*np.cos(phi)-Cd*np.cos(phi)
+
+        F = 2/m.pi * np.arccos(np.exp(-B/2 * (R-r)/(r*np.sin(abs(phi)))))
+        
+        if a_old<ac :
+            CT=4*F*a_new*(1-a_new)
+        else: 
+            CT=4*a_new*F*(1-1/4*(5-3*a_new)*a_new)
+
+        a_old=a_new
+        a_prime_old=a_prime_new 
+
+        if a_old<ac :
+            a_new = solidity*Cn*(1-a_old)/(4*F*np.sin(phi)**2)
+        else :
+            if typ=='G' :
+                a_et = CT / (4*F*(1-1/4 * (5 - 3 *a_old)*a_old))
+                a_new = 0.1*a_et + (1-0.1)*a_old
+            if typ=='W' :
+                K = (4*F*np.sin(phi)**2)/(solidity*Cn)
+                a_new = 1 + K/2 *(1- 2*ac) - 1/2 * np.sqrt((K*(1-2*ac)+2)**2+4*(K*ac**2-1))
+        
+        a_prime_new = Ct * solidity * (1+a_prime_old) / (4*F*np.sin(phi)*np.cos(phi))
+       
+
+    return(a_new,a_prime_new)
+
+print(find_a(r, omega, pitch, beta, c, Cl, Cd,eps,B,typ='G'))

@@ -1,0 +1,181 @@
+import numpy as np
+import math as m
+import pandas as pd
+
+V0=8
+R=31
+rho=1.225
+omega=2.61
+pitch=-3*m.pi/180
+beta=2*m.pi/180
+
+c=1.5
+Cl=0.5
+Cd=0.01
+eps=1e-10
+r = 24.5
+B=3
+
+ files=['FFA-W3-241.txt','FFA-W3-301.txt','FFA-W3-360.txt','FFA-W3-480.txt','FFA-W3-600.txt','cylinder.txt']
+#Initializing tables    
+cl_tab=np.zeros([105,6])
+cd_tab=np.zeros([105,6])
+cm_tab=np.zeros([105,6])
+aoa_tab=np.zeros([105,])
+#Readin of tables. Only do this once at startup of simulation
+for i in range(np.size(files)):
+    aoa_tab[:],cl_tab[:,i],cd_tab[:,i],cm_tab[:,i] = np.loadtxt(files[i], skiprows=0).T
+
+# Thickness of the airfoils considered
+# NOTE THAT IN PYTHON THE INTERPOLATION REQUIRES THAT THE VALUES INCREASE IN THE VECTOR!
+
+thick_prof=np.zeros(6)
+thick_prof[0]=24.1;
+thick_prof[1]=30.1;
+thick_prof[2]=36;
+thick_prof[3]=48;
+thick_prof[4]=60;
+thick_prof[5]=100;
+
+
+def bem_algorithm(r, omega, pitch, beta, c, Cl, Cd,eps,B,V0,typ):
+
+    theta = beta + pitch
+    TSR = omega * R /V0
+
+    if typ=='W':ac=0.2
+    else : ac=1/3
+
+    solidity=(c*B/(2*m.pi*r))
+
+    a_new=0
+    a_prime_new=0
+    a_old=0
+    a_prime_old=0
+
+    while a_new==0 or abs(a_new - a_old) > eps or abs(a_prime_new - a_prime_old) > eps:
+        
+        
+        a_old=a_new
+        a_prime_old=a_prime_new
+
+        phi=np.arctan(((1-a_old)*V0)/((1+a_prime_old)*omega*r))
+        
+        alpha = phi - theta
+        
+        Cn = Cl*np.cos(phi)+Cd*np.sin(phi)
+        Ct = Cl*np.sin(phi)-Cd*np.cos(phi)
+
+        F = 2/m.pi * np.arccos(np.exp(-B/2 * (R-r)/(r*np.sin(abs(phi)))))
+
+        CT=(1-a_old)**2*solidity*Cn/np.sin(phi)**2
+
+        
+            
+        if a_old<=ac :
+            a_new= CT/(4*F*(1-a_old))
+        else :
+            if typ=='G' :
+                a_et = CT / (4*F*(1-1/4 * (5 - 3 *a_old)*a_old))
+                a_new = 0.1*a_et + (1-0.1)*a_old
+            if typ=='W' :
+                K = (4*F*np.sin(phi)**2)/(solidity*Cn)
+                a_new = 1 + K/2 *(1- 2*ac) - 1/2 * np.sqrt((K*(1-2*ac)+2)**2+4*(K*ac**2-1))
+        
+        a_prime_new = Ct * solidity * (1+a_prime_old) / (4*F*np.sin(phi)*np.cos(phi))
+
+        
+
+    return(a_new,a_prime_new,Cn,Ct,phi)
+
+a,a_prime,Cn,Ct,phi=bem_algorithm(r, omega, pitch, beta, c, Cl, Cd,eps,B,V0,typ='G')
+
+Vrel=np.sqrt((V0-a*V0)**2+(a_prime*omega*r+omega*r)**2)
+
+pn=0.5*rho*Vrel**2*c*Cn 
+pt=0.5*rho*Vrel**2*c*Ct
+
+print(a,a_prime,pn,pt)
+
+
+def cp_loop(omega,pitch): 
+    blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
+    for TSR in np.arange(5,11):
+        for theta_p in np.arange(-3,5):
+            for r in blade[0]:
+
+                c=blade[2].loc[blade[0]==r]
+                beta=blade[1].loc[blade[0]==r]
+                t=c*blade[3].loc[blade[0]==r]
+
+                V0=omega*r/TSR
+                
+                solidity=(c*B/(2*m.pi*r))
+                theta = beta + theta_p
+
+                list_pn=[]
+                list_pt=[]
+
+                a_new=0
+                a_prime_new=0
+
+                while a_new==0 or abs(a_new - a_old) > eps or abs(a_prime_new - a_prime_old) > eps:
+        
+                    a_old=a_new
+                    a_prime_old=a_prime_new
+
+                    phi=np.arctan(((1-a_old)*V0)/((1+a_prime_old)*omega*r))
+                    
+                    alpha = phi - theta
+                    
+                    [Cl,Cd,Cm]=force_coeffs_10MW(alpha,t,aoa_tab,cl_tab,cd_tab,cm_tab)
+
+                    Cn = Cl*np.cos(phi)+Cd*np.sin(phi)
+                    Ct = Cl*np.sin(phi)-Cd*np.cos(phi)
+
+                    F = 2/m.pi * np.arccos(np.exp(-B/2 * (R-r)/(r*np.sin(abs(phi)))))
+
+                    CT=(1-a_old)**2*solidity*Cn/np.sin(phi)**2
+
+                    
+                        
+                    if a_old<=1/3 :
+                        a_new= CT/(4*F*(1-a_old))
+                    else :
+                        a_star = CT / (4*F*(1-1/4 * (5 - 3 *a_old)*a_old))
+                        a_new = 0.1*a_star + (1-0.1)*a_old
+                    
+                    a_prime_new = Ct * solidity * (1+a_prime_old) / (4*F*np.sin(phi)*np.cos(phi))
+                
+                Vrel=np.sqrt((V0-a*V0)**2+(a_prime*omega*r+omega*r)**2)
+
+                list_pn.append(0.5*rho*Vrel**2*c*Cn)
+                list_pt.append(0.5*rho*Vrel**2*c*Ct)
+
+                P=omega*B*list_pt[0]*blade[0]**2/2
+                P+=omega*B*(list_pt[i+1]*blade[i+1]**2/2-list_pt[i]*blade[i]**2/2)
+                
+                
+def force_coeffs_10MW(angle_of_attack,thick,aoa_tab,cl_tab,cd_tab,cm_tab):
+    cl_aoa=np.zeros([1,6])
+    cd_aoa=np.zeros([1,6])
+    cm_aoa=np.zeros([1,6])
+    
+
+    #Interpolate to current angle of attack:
+    for i in range(np.size(files)):
+        cl_aoa[0,i]=np.interp (angle_of_attack,aoa_tab,cl_tab[:,i])
+        cd_aoa[0,i]=np.interp (angle_of_attack,aoa_tab,cd_tab[:,i])
+        cm_aoa[0,i]=np.interp (angle_of_attack,aoa_tab,cm_tab[:,i])
+    
+    #Interpolate to current thickness:
+    cl=np.interp (thick,thick_prof,cl_aoa[0,:])
+    cd=np.interp (thick,thick_prof,cd_aoa[0,:])
+    cm=np.interp (thick,thick_prof,cm_aoa[0,:])
+
+
+    return cl, cd, cm 
+
+
+
+cp_loop()

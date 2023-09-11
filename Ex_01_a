@@ -39,10 +39,18 @@ while a == 0 or (abs(a - a_old) > eps and abs(a_prime - a_prime_old) > eps):
     a_old = a
     a_prime_old = a_prime
 
+    # Glauert correction
     if a_old <= 0.33:
         a = CT / (4 * F * (1-a_old))
     else:
         a = CT / (4 * F * (1 - 1/4 * (5 - 3 * a_old) * a_old))
     a_prime = sigma * Ct * (1 + a_prime_old) / (4 * F * np.sin(phi) * np.cos(phi))
 
+    Vrel = m.sqrt((V0-a*V0)**2 + (omega*r + a_prime*omega*r)**2)
+    pn = 0.5*rho*Vrel**2 * c * Cn
+    pt = 0.5*rho*Vrel**2 * c * Ct
+
 print(f"a ={a:.3f}, a_prime = {a_prime:.3f}, F = {F:.3f}")
+print(f"pt ={pt:.3f}, pn = {pn:.3f}")
+
+

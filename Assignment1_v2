@@ -2,6 +2,7 @@ import numpy as np
 import math as m
 import pandas as pd
 import os
+import matplotlib.pyplot as plt
 os.chdir('Assignment_data')
 
 #V0=8
@@ -42,30 +43,32 @@ thick_prof[5]=100;
 def cp_loop(B,ac,eps,max_iteration=10000): 
     blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
     list_cp=[]
-    list_radius=list(blade[0])[1:]
+    list_radius=list(blade[0])[:-1]
     V0=8
-    for TSR in np.arange(5,11,1):
+    for TSR in np.arange(7,11,1):
         omega=TSR*V0/R
-        for theta_p in np.arange(-4,4,1):
+        
+        for theta_p in np.arange(-1,2,0.5):
             theta_p*=np.pi/180
             P,T=0,0
+
             for i,r in enumerate(list_radius) :
-            
+                #print(r)
                 c=list(blade[2].loc[blade[0]==r])[0]
                 beta=list(blade[1].loc[blade[0]==r])[0]
                 #print("beta ",beta)
                 beta=beta*np.pi/180
-                t=c*list(blade[3].loc[blade[0]==r])[0]
+                t_perc=list(blade[3].loc[blade[0]==r])[0]
 
-                solidity=(c*B/(2*m.pi*r))
+                solidity=c*B/(2*np.pi*r)
                 
-                a,a_prime,Cn,Ct,CT,F,phi,count=bem_algorithm(r,solidity, TSR, B, beta, theta_p, t, ac, eps, max_iteration)
+                a,a_prime,Cn,Ct,CT,F,phi,count=bem_algorithm(r,solidity, TSR, B, beta, theta_p, t_perc, ac, eps, max_iteration)
                 
                 Vrel=np.sqrt((V0-a*V0)**2+((a_prime+1)*omega*r)**2)
 
                 pn=0.5*rho*Vrel**2*c*Cn
                 pt=0.5*rho*Vrel**2*c*Ct
-                
+                #print(pt,pn)
                 if i==0:
                     P=omega*B*pt*r*(list_radius[i]-0)
                     T=B*pn*(list_radius[i]-0)
@@ -76,10 +79,9 @@ def cp_loop(B,ac,eps,max_iteration=10000):
                     T+=B*pn*(list_radius[i]-list_radius[i-1])
                     #CP2+= TSR*B*(1-a)**2*Ct / (2*np.pi*np.sin(phi)**2) * c/R * (list_radius[i]-list_radius[i-1])
                     #CP3+= (1-a)*Ct*8*F*r/(2*Cn) * (list_radius[i]-list_radius[i-1])
-               
+
             CP=P/(0.5*rho*V0**3*np.pi*R**2)
-            print(CP)
-            list_cp.append([TSR,theta_p,CP])
+            list_cp.append([TSR,theta_p,CP,P])
     return(list_cp)
                 
                 
@@ -122,7 +124,7 @@ def update_a(a_old,ac,CT,F,phi,solidity,Cn):
 def update_a_prime(a_prime_old,F,phi,solidity,Ct):       
     return(Ct * solidity * (1+a_prime_old) / (4*F*np.sin(phi)*np.cos(phi)))
 
-def bem_algorithm(r,solidity, TSR, B, beta, theta_p, t, ac, eps, max_iteration):
+def bem_algorithm(r,solidity, TSR, B, beta, theta_p, t_perc, ac, eps, max_iteration):
 
     a_new, a_prime_new = 0, 0
 
@@ -137,10 +139,11 @@ def bem_algorithm(r,solidity, TSR, B, beta, theta_p, t, ac, eps, max_iteration):
         phi=np.arctan(((1-a_old)*R)/((1+a_prime_old)*TSR*r))
         #print("phi ",phi*180/np.pi)
         theta = beta + theta_p
+        #print(beta*180/np.pi)
         alpha = phi - theta
-        #print("alpha ",alpha*180/np.pi)
-        Cl,Cd,Cm = force_coeffs_10MW(alpha*180/np.pi,t,aoa_tab,cl_tab,cd_tab,cm_tab)
-
+        
+        Cl,Cd,Cm = force_coeffs_10MW(alpha*180/np.pi,t_perc,aoa_tab,cl_tab,cd_tab,cm_tab)
+        #print(Cl,Cd)
         Cn = Cl * np.cos(phi) + Cd * np.sin(phi)
         Ct = Cl * np.sin(phi) - Cd * np.cos(phi)
         
@@ -156,8 +159,21 @@ def bem_algorithm(r,solidity, TSR, B, beta, theta_p, t, ac, eps, max_iteration):
         if count>max_iteration :
             k=1
             print('not converged')
-
+    #print(a_new,a_prime_new)
     return(a_new,a_prime_new,Cn,Ct,CT,F,phi,count)
 
 
-cp_loop(B,1/3,eps,max_iteration=100000)
+list_cp=np.array(cp_loop(B,1/3,eps,max_iteration=100000))
+
+
+Cp_max, TSR_max, theta_p_max, P_max = 0, 0, 0, 0
+for i in range (0,len(list_cp)):
+    if list_cp[i,2]>=Cp_max :
+        Cp_max = list_cp[i,2]
+        TSR_max = list_cp[i,0]
+        theta_p_max = list_cp[i,1]
+        P_max = list_cp[i,3]
+print(Cp_max, TSR_max, theta_p_max, P_max)
+
+plt.contour(list_cp[:,:2].T,list_cp[:,2],levels=np.arange(0.1,1,0.1))
+plt.show()

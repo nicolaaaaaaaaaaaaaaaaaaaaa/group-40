@@ -38,73 +38,12 @@ thick_prof[2]=36;
 thick_prof[3]=48;
 thick_prof[4]=60;
 thick_prof[5]=100;
-"""
-def bem_algorithm(r, omega, pitch, beta, c, Cl, Cd,eps,B,V0,typ):
 
-    theta = beta + pitch
-    TSR = omega * R /V0
-
-    if typ=='W':ac=0.2
-    else : ac=1/3
-
-    solidity=(c*B/(2*m.pi*r))
-
-    a_new=0
-    a_prime_new=0
-    a_old=0
-    a_prime_old=0
-
-    while a_new==0 or abs(a_new - a_old) > eps or abs(a_prime_new - a_prime_old) > eps:
-        
-        
-        a_old=a_new
-        a_prime_old=a_prime_new
-
-        phi=np.arctan(((1-a_old)*V0)/((1+a_prime_old)*omega*r))
-        
-        alpha = phi - theta
-        
-        Cn = Cl*np.cos(phi)+Cd*np.sin(phi)
-        Ct = Cl*np.sin(phi)-Cd*np.cos(phi)
-
-        F = 2/m.pi * np.arccos(np.exp(-B/2 * (R-r)/(r*np.sin(abs(phi)))))
-
-        CT=(1-a_old)**2*solidity*Cn/np.sin(phi)**2
-
-        
-            
-        if a_old<=ac :
-            a_new= CT/(4*F*(1-a_old))
-        else :
-            if typ=='G' :
-                a_et = CT / (4*F*(1-1/4 * (5 - 3 *a_old)*a_old))
-                a_new = 0.1*a_et + (1-0.1)*a_old
-            if typ=='W' :
-                K = (4*F*np.sin(phi)**2)/(solidity*Cn)
-                a_new = 1 + K/2 *(1- 2*ac) - 1/2 * np.sqrt((K*(1-2*ac)+2)**2+4*(K*ac**2-1))
-        
-        a_prime_new = Ct * solidity * (1+a_prime_old) / (4*F*np.sin(phi)*np.cos(phi))
-
-        
-
-    return(a_new,a_prime_new,Cn,Ct,phi)
-
-a,a_prime,Cn,Ct,phi=bem_algorithm(r, omega, pitch, beta, c, Cl, Cd,eps,B,V0,typ='G')
-print(a,a_prime,Cn,Ct,phi)
-
-Vrel=np.sqrt((V0-a*V0)**2+(a_prime*omega*r+omega*r)**2)
-
-pn=0.5*rho*Vrel**2*c*Cn 
-pt=0.5*rho*Vrel**2*c*Ct
-
-print(a,a_prime,pn,pt)
-
-"""
 def cp_loop(B,ac,eps,max_iteration=10000): 
     blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
     list_cp=[]
     list_radius=list(blade[0])[1:]
-    V0=10
+    V0=8
     for TSR in np.arange(5,11,1):
         omega=TSR*V0/R
         for theta_p in np.arange(-4,4,1):
@@ -113,32 +52,34 @@ def cp_loop(B,ac,eps,max_iteration=10000):
             for i,r in enumerate(list_radius) :
             
                 c=list(blade[2].loc[blade[0]==r])[0]
-                beta=list(blade[1].loc[blade[0]==r])[0]*np.pi/180
+                beta=list(blade[1].loc[blade[0]==r])[0]
+                #print("beta ",beta)
+                beta=beta*np.pi/180
                 t=c*list(blade[3].loc[blade[0]==r])[0]
 
                 solidity=(c*B/(2*m.pi*r))
                 
                 a,a_prime,Cn,Ct,CT,F,phi,count=bem_algorithm(r,solidity, TSR, B, beta, theta_p, t, ac, eps, max_iteration)
                 
-                Vrel=np.sqrt((V0-a*V0)**2+(a_prime+omega*r)**2)
-                
+                Vrel=np.sqrt((V0-a*V0)**2+((a_prime+1)*omega*r)**2)
+
                 pn=0.5*rho*Vrel**2*c*Cn
                 pt=0.5*rho*Vrel**2*c*Ct
                 
                 if i==0:
                     P=omega*B*pt*r*(list_radius[i]-0)
                     T=B*pn*(list_radius[i]-0)
-                    CP2= TSR*B*(1-a)**2*Ct / (2*np.pi*np.sin(phi)**2) * c/R * (list_radius[i]-0)
-                    CP3= (1-a)*Ct*8*F*r/(2*Cn) * (list_radius[i]-0)
+                    #CP2= TSR*B*(1-a)**2*Ct / (2*np.pi*np.sin(phi)**2) * c/R * (list_radius[i]-0)
+                    #CP3= (1-a)*Ct*8*F*r/(2*Cn) * (list_radius[i]-0)
                 else :
                     P+=omega*B*pt*r*(list_radius[i]-list_radius[i-1])
                     T+=B*pn*(list_radius[i]-list_radius[i-1])
-                    CP2+= TSR*B*(1-a)**2*Ct / (2*np.pi*np.sin(phi)**2) * c/R * (list_radius[i]-list_radius[i-1])
-                    CP3+= (1-a)*Ct*8*F*r/(2*Cn) * (list_radius[i]-list_radius[i-1])
+                    #CP2+= TSR*B*(1-a)**2*Ct / (2*np.pi*np.sin(phi)**2) * c/R * (list_radius[i]-list_radius[i-1])
+                    #CP3+= (1-a)*Ct*8*F*r/(2*Cn) * (list_radius[i]-list_radius[i-1])
                
-            CP1=P/(0.5*rho*V0**3*np.pi*R**2)
-            print(CP1,CP2,CP3) 
-            list_cp.append([TSR,theta_p,CP1,CP2,CP3])
+            CP=P/(0.5*rho*V0**3*np.pi*R**2)
+            print(CP)
+            list_cp.append([TSR,theta_p,CP])
     return(list_cp)
                 
                 
@@ -193,15 +134,16 @@ def bem_algorithm(r,solidity, TSR, B, beta, theta_p, t, ac, eps, max_iteration):
                 
         a_old, a_prime_old = a_new, a_prime_new
 
-        phi=np.arctan(((1-a_old))/((1+a_prime_old)*TSR))
-        
+        phi=np.arctan(((1-a_old)*R)/((1+a_prime_old)*TSR*r))
+        #print("phi ",phi*180/np.pi)
         theta = beta + theta_p
         alpha = phi - theta
+        #print("alpha ",alpha*180/np.pi)
         Cl,Cd,Cm = force_coeffs_10MW(alpha*180/np.pi,t,aoa_tab,cl_tab,cd_tab,cm_tab)
 
         Cn = Cl * np.cos(phi) + Cd * np.sin(phi)
         Ct = Cl * np.sin(phi) - Cd * np.cos(phi)
-
+        
         F = 2/np.pi * np.arccos(np.exp(-B/2 * (R-r)/(r * np.sin(abs(phi)))))
 
         CT=(1-a_old)**2*solidity*Cn/np.sin(phi)**2

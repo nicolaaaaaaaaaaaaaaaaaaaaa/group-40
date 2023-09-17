@@ -1,0 +1,436 @@
+""" Importation of libraries """
+
+import numpy as np
+import math as m
+import pandas as pd
+import os
+import matplotlib.pyplot as plt
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+
+os.chdir('Assignment_data')
+
+files=['FFA-W3-241.txt','FFA-W3-301.txt','FFA-W3-360.txt','FFA-W3-480.txt','FFA-W3-600.txt','cylinder.txt']
+
+#Initializing tables    
+cl_tab=np.zeros([105,6])
+cd_tab=np.zeros([105,6])
+cm_tab=np.zeros([105,6])
+aoa_tab=np.zeros([105,])
+#Readin of tables. Only do this once at startup of simulation
+for i in range(np.size(files)):
+    aoa_tab[:],cl_tab[:,i],cd_tab[:,i],cm_tab[:,i] = np.loadtxt(files[i], skiprows=0).T
+
+# Thickness of the airfoils considered
+# NOTE THAT IN PYTHON THE INTERPOLATION REQUIRES THAT THE VALUES INCREASE IN THE VECTOR!
+
+thick_prof=np.zeros(6)
+thick_prof[0]=24.1;
+thick_prof[1]=30.1;
+thick_prof[2]=36;
+thick_prof[3]=48;
+thick_prof[4]=60;
+thick_prof[5]=100;
+
+
+
+def find_global_cp(X,Y,V0,B,ac,eps,max_iteration): 
+
+    blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
+    
+    list_radius=list(blade[0])[:-1]
+    
+    Z=np.zeros((len(X),len(X[0])))
+
+    for k1 in range (len(X)):
+        for k2 in range (len(X[0])):
+    #for TSR in np.arange(5,11,1):
+        #omega=TSR*V0/R
+        
+        #for theta_p in np.arange(-4,4,1):
+            TSR=X[k1,k2]
+            omega=TSR*V0/R
+            theta_p=Y[k1,k2]
+            
+            theta_p*=np.pi/180
+            P,T=0,0
+
+            for i,r in enumerate(list_radius) :
+                
+                c=list(blade[2].loc[blade[0]==r])[0]
+                beta=list(blade[1].loc[blade[0]==r])[0]
+                beta=beta*np.pi/180
+                t_perc=list(blade[3].loc[blade[0]==r])[0]
+
+                solidity=c*B/(2*np.pi*r)
+                
+                a,a_prime,Cn,Ct,Cl,Cd,CT,F,phi,alpha,count=bem_algorithm(r,solidity, TSR, B, beta, theta_p, t_perc, ac, eps, max_iteration)
+                
+                Vrel=np.sqrt((V0-a*V0)**2+((a_prime+1)*omega*r)**2)
+
+                pn=0.5*rho*Vrel**2*c*Cn
+                pt=0.5*rho*Vrel**2*c*Ct
+                
+                if i==0:
+                    P=omega*B*pt*r*(list_radius[i]-0)
+                    T=B*pn*(list_radius[i]-0)
+
+                else :
+                    P+=omega*B*pt*r*(list_radius[i]-list_radius[i-1])
+                    T+=B*pn*(list_radius[i]-list_radius[i-1])
+                    
+            P+=omega*B*pt*r*(list(blade[0])[-2]-list(blade[0])[-1])   # for last element
+            T+=B*pn*(list(blade[0])[-2]-list(blade[0])[-1])           # for last element
+            CP=P/(0.5*rho*V0**3*np.pi*R**2)
+            Z[k1][k2]=CP
+           
+            #list_cp.append([TSR,theta_p,CP,P])
+    #return(list_cp)
+    return(Z)
+                               
+def force_coeffs_10MW(angle_of_attack,thick,aoa_tab,cl_tab,cd_tab,cm_tab):
+    
+    cl_aoa=np.zeros([1,6])
+    cd_aoa=np.zeros([1,6])
+    cm_aoa=np.zeros([1,6])
+    
+
+    #Interpolate to current angle of attack:
+    for i in range(np.size(files)):
+        cl_aoa[0,i]=np.interp (angle_of_attack,aoa_tab,cl_tab[:,i])
+        cd_aoa[0,i]=np.interp (angle_of_attack,aoa_tab,cd_tab[:,i])
+        cm_aoa[0,i]=np.interp (angle_of_attack,aoa_tab,cm_tab[:,i])
+    
+    #Interpolate to current thickness:
+    cl=np.interp (thick,thick_prof,cl_aoa[0,:])
+    cd=np.interp (thick,thick_prof,cd_aoa[0,:])
+    cm=np.interp (thick,thick_prof,cm_aoa[0,:])
+
+
+    return cl, cd, cm 
+
+def update_a(a_old,ac,CT,F,phi,solidity,Cn):
+    if a_old<=ac :
+            a_new= CT/(4*F*(1-a_old))
+    else :
+        if ac==1/3 :
+            a_et = CT / (4*F*(1-1/4 * (5 - 3 *a_old)*a_old))
+            a_new = 0.1*a_et + (1-0.1)*a_old
+        if ac==0.2 :
+            K = (4*F*np.sin(phi)**2)/(solidity*Cn)
+            a_new = 1 + K/2 *(1- 2*ac) - 1/2 * np.sqrt((K*(1-2*ac)+2)**2+4*(K*ac**2-1))
+    return(a_new)
+
+def update_a_prime(a_prime_old,F,phi,solidity,Ct):       
+    return(Ct * solidity * (1+a_prime_old) / (4*F*np.sin(phi)*np.cos(phi)))
+
+def bem_algorithm(r,solidity, TSR, B, beta, theta_p, t_perc, ac, eps, max_iteration):
+
+    a_new, a_prime_new = 0, 0
+
+    k, count = 0, 0
+
+    while k==0:
+
+        count+=1
+                
+        a_old, a_prime_old = a_new, a_prime_new
+
+        phi=np.arctan(((1-a_old)*R)/((1+a_prime_old)*TSR*r))
+        #print("phi ",phi*180/np.pi)
+        theta = beta + theta_p
+        #print(beta*180/np.pi)
+        alpha = phi - theta
+        
+        Cl,Cd,Cm = force_coeffs_10MW(alpha*180/np.pi,t_perc,aoa_tab,cl_tab,cd_tab,cm_tab)
+        #print(Cl,Cd)
+        Cn = Cl * np.cos(phi) + Cd * np.sin(phi)
+        Ct = Cl * np.sin(phi) - Cd * np.cos(phi)
+        
+        F = 2/np.pi * np.arccos(np.exp(-B/2 * (R-r)/(r * np.sin(abs(phi)))))
+
+        CT=(1-a_old)**2*solidity*Cn/np.sin(phi)**2
+
+        a_new = update_a(a_old,ac,CT,F,phi,solidity,Cn)
+        a_prime_new = update_a_prime(a_prime_old,F,phi,solidity,Ct)
+
+        if abs(a_new - a_old) < eps and abs(a_prime_new - a_prime_old) < eps:
+            k=1
+        if count>max_iteration :
+            k=1
+            print('not converged')
+    #print(a_new,a_prime_new)
+    return(a_new,a_prime_new,Cn,Ct,Cl,Cd,CT,F,phi,alpha,count)
+
+def question_one(x,y,V0,ac,eps,max_iteration):
+    
+    X,Y=np.meshgrid(x,y)
+    Z=np.array(find_global_cp(X,Y,V0,B,ac,eps,max_iteration))
+
+    Cp_max, TSR_max, theta_p_max = 0, 0, 0
+    for i in range (len(Z)):
+        for j in range (len(Z[0])):
+            if Z[i,j]>=Cp_max :
+                Cp_max = Z[i,j]
+                TSR_max = X[i,j]
+                theta_p_max = Y[i,1]
+    print(f"CP_max ={Cp_max:.3f} \nTSR_max = {TSR_max:.3f} \ntheta_p_max = {theta_p_max:.3f}")
+
+    fig = make_subplots()
+
+    fig.add_trace(
+        go.Contour(
+            z=Z,
+            x=x, # horizontal axis
+            y=y,
+            colorscale='Hot')) # vertical axis
+    """contours=dict(
+                start=0.46,
+                end=0.5,
+                size=0.0,
+            )
+        ))"""
+
+    fig.add_trace(
+        go.Scatter(
+            x=[TSR_max], # horizontal axis
+            y=[theta_p_max], # vertical axis
+            marker=dict(color="black", size=10)
+        ))
+
+    fig.show()
+
+# eps=1e-10
+# max_iteration=10000
+# V0=8
+# B=3
+# R=89.17
+# rho=1.225
+# ac=1/3 # 1/3 for Glauert, 0.2 for Wilson&Walker
+# x=np.arange(7,8,0.05)
+# y=np.arange(-0.6,-0.3,0.05)
+
+# question_one(x,y,V0,ac,eps,max_iteration)
+
+""" 
+
+Results 
+
+G correction
+CP_max =0.498
+TSR_max = 7.750 +/- 0.05
+theta_p_max = -0.450 +/- 0.05
+
+W&W
+CP_max =0.563 
+TSR_max = 8.400 +/- 0.05
+theta_p_max = -3.000 +/- 0.05
+
+"""
+
+def find_local_cp(list_chord,TSR_max,theta_p_max,r,B,ac,eps,max_iteration): 
+
+    blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
+
+    theta_p_max*=np.pi/180
+
+    c=list(blade[2].loc[round(blade[0],2)==r])[0]
+    beta=list(blade[1].loc[round(blade[0],2)==r])[0]
+    beta=beta*np.pi/180
+    t_perc=list(blade[3].loc[round(blade[0],2)==r])[0]
+
+    solidity=c*B/(2*np.pi*r)
+    
+    a,a_prime,Cn,Ct,Cl,Cd,CT,F,phi,alpha,count=bem_algorithm(r,solidity, TSR_max, B, beta, theta_p_max, t_perc, ac, eps, max_iteration)
+
+    list_dCP=[]
+
+    for c in list_chord :
+        
+        solidity=c*B/(2*np.pi*r)
+        
+        a,a_prime,Cn,Ct,CT,F,phi,beta,count=bem_algorithm_q2(r,solidity, TSR_max, B, theta_p_max,  alpha, Cl, Cd, ac, eps, max_iteration)
+        
+        list_dCP.append([c,beta,TSR_max*B*(1-a)**2*Ct / (2*np.pi*np.sin(phi)**2) * c/R])
+    
+
+    return(np.array(list_dCP))
+ 
+def bem_algorithm_q2(r,solidity, TSR, B, theta_p, alpha, Cl, Cd, ac, eps, max_iteration):
+
+    a_new, a_prime_new = 0, 0
+
+    k, count = 0, 0
+
+    while k==0:
+
+        count+=1
+                
+        a_old, a_prime_old = a_new, a_prime_new
+
+        phi=np.arctan(((1-a_old)*R)/((1+a_prime_old)*TSR*r))
+        
+        theta = phi - alpha
+        beta = theta - theta_p
+
+        Cn = Cl * np.cos(phi) + Cd * np.sin(phi)
+        Ct = Cl * np.sin(phi) - Cd * np.cos(phi)
+        
+        F = 2/np.pi * np.arccos(np.exp(-B/2 * (R-r)/(r * np.sin(abs(phi)))))
+
+        CT=(1-a_old)**2*solidity*Cn/np.sin(phi)**2
+
+        a_new = update_a(a_old,ac,CT,F,phi,solidity,Cn)
+        a_prime_new = update_a_prime(a_prime_old,F,phi,solidity,Ct)
+
+        if abs(a_new - a_old) < eps and abs(a_prime_new - a_prime_old) < eps:
+            k=1
+        if count>max_iteration :
+            k=1
+            print('not converged')
+    #print(a_new,a_prime_new)
+    return(a_new,a_prime_new,Cn,Ct,CT,F,phi,beta,count)
+
+def question_two(list_chord,TSR_max, theta_p_max,r,B,ac,eps,max_iteration):
+    list_cp=find_local_cp(list_chord=list_chord,
+                    TSR_max=TSR_max,
+                    theta_p_max=theta_p_max,
+                    r=r,
+                    B=B,
+                    ac=ac,eps=eps,max_iteration=max_iteration)
+
+    fig = make_subplots()
+
+    fig.add_trace(
+        go.Scatter(
+            x=list_cp[:,0], # horizontal axis
+            y=list_cp[:,1]*180/np.pi, # vertical axis
+            marker=dict(color="black", size=10)
+        ))
+    
+    fig.add_trace(
+        go.Scatter(
+            x=list_cp[:,0], # horizontal axis
+            y=list_cp[:,2], # vertical axis
+            marker=dict(color="black", size=10)
+        ))
+
+
+    fig.show()
+
+# R=89.17
+# rho=1.225
+# eps=1e-5
+# ac=1/3
+# max_iteration = 10000
+# r = 71.97
+# TSR=7.75
+# theta_p=-0.45
+# B=3
+# list_chord=np.arange(2.7,3.1,0.01)
+# question_two(list_chord=list_chord,
+#             TSR_max=TSR,
+#             theta_p_max=theta_p,
+#             r=r,
+#             B=B,
+#             ac=ac,eps=eps,max_iteration=max_iteration)
+
+"""
+Results
+
+c = 2.9m
+beta = -1.09 °
+dCP = 0.5259
+
+"""
+
+def question_3(TSR_max,P_max, CP_max):
+    V0_rated = np.cbrt(P_max/(0.5*rho*np.pi*R**2*CP_max))
+    omega_max = TSR_max*V0_rated/R * 30/np.pi
+
+    print(f"V0_rated ={V0_rated:.3f} \nomega_max = {omega_max:.3f}")
+
+    V0_list=np.arange(4,25,0.1)
+    rotational_speed=TSR_max*V0_list/R * 30/np.pi
+
+    fig = make_subplots()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=V0_list, # horizontal axis
+            y=rotational_speed, # vertical axis
+            marker=dict(color="black", size=10)
+        ))
+
+    fig.show()
+    
+# R=89.17
+# rho=1.225
+# CP_max =  0.498
+# P_max = 10.64e6
+# TSR_max=7.75
+
+# question_3(TSR_max,P_max,CP_max)
+
+"""
+Results
+
+V0_rated =11.177 
+omega_max = 9.277
+"""
+
+def question_4(list_V0,B,ac,eps,max_iteration,V0_rated,omega_max,power_max): 
+    
+
+    blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
+    
+    list_radius=list(blade[0])[:-1]
+    
+    Z=np.zeros((len(X),len(X[0])))
+
+    for k1 in range (len(list_V0)):
+        for k2 in range (len(X[0])):
+    #for TSR in np.arange(5,11,1):
+        #omega=TSR*V0/R
+        
+        #for theta_p in np.arange(-4,4,1):
+            TSR=X[k1,k2]
+            omega=TSR*V0/R
+            theta_p=Y[k1,k2]
+            
+            theta_p*=np.pi/180
+            P,T=0,0
+
+            for i,r in enumerate(list_radius) :
+                
+                c=list(blade[2].loc[blade[0]==r])[0]
+                beta=list(blade[1].loc[blade[0]==r])[0]
+                beta=beta*np.pi/180
+                t_perc=list(blade[3].loc[blade[0]==r])[0]
+
+                solidity=c*B/(2*np.pi*r)
+                
+                a,a_prime,Cn,Ct,Cl,Cd,CT,F,phi,alpha,count=bem_algorithm(r,solidity, TSR, B, beta, theta_p, t_perc, ac, eps, max_iteration)
+                
+                Vrel=np.sqrt((V0-a*V0)**2+((a_prime+1)*omega*r)**2)
+
+                pn=0.5*rho*Vrel**2*c*Cn
+                pt=0.5*rho*Vrel**2*c*Ct
+                
+                if i==0:
+                    P=omega*B*pt*r*(list_radius[i]-0)
+                    T=B*pn*(list_radius[i]-0)
+
+                else :
+                    P+=omega*B*pt*r*(list_radius[i]-list_radius[i-1])
+                    T+=B*pn*(list_radius[i]-list_radius[i-1])
+                    
+            P+=omega*B*pt*r*(list(blade[0])[-2]-list(blade[0])[-1])   # for last element
+            T+=B*pn*(list(blade[0])[-2]-list(blade[0])[-1])           # for last element
+            CP=P/(0.5*rho*V0**3*np.pi*R**2)
+            Z[k1][k2]=CP
+           
+            #list_cp.append([TSR,theta_p,CP,P])
+    #return(list_cp)
+    return(Z)
+

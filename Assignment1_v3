@@ -11,7 +11,7 @@ import matplotlib.pyplot as plt
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-os.chdir('Assignment_data')
+#os.chdir('Assignment_data')
 
 files=['FFA-W3-241.txt','FFA-W3-301.txt','FFA-W3-360.txt','FFA-W3-480.txt','FFA-W3-600.txt','cylinder.txt']
 
@@ -57,7 +57,7 @@ def find_global_cp(X,Y,V0,B,ac,eps,max_iteration):
             
             theta_p*=np.pi/180
             P,T=0,0
-
+            list_pn,list_pt=[],[]
             for i,r in enumerate(list_radius) :
                 
                 c=list(blade[2].loc[blade[0]==r])[0]
@@ -71,19 +71,19 @@ def find_global_cp(X,Y,V0,B,ac,eps,max_iteration):
                 
                 Vrel=np.sqrt((V0-a*V0)**2+((a_prime+1)*omega*r)**2)
 
-                pn=0.5*rho*Vrel**2*c*Cn
-                pt=0.5*rho*Vrel**2*c*Ct
+                list_pn.append(0.5*rho*Vrel**2*c*Cn)
+                list_pt.append(0.5*rho*Vrel**2*c*Ct)
                 
                 if i==0:
-                    P=omega*B*pt*r*(list_radius[i]-0)
-                    T=B*pn*(list_radius[i]-0)
+                    P=omega*B*list_pt[0]/2*r*(list_radius[i]-0)
+                    T=B*list_pn[0]/2*(list_radius[i]-0)
 
                 else :
-                    P+=omega*B*pt*r*(list_radius[i]-list_radius[i-1])
-                    T+=B*pn*(list_radius[i]-list_radius[i-1])
+                    P+=omega*B*(list_pt[i]+list_pt[i-1])/2*r*(list_radius[i]-list_radius[i-1])
+                    T+=B*(list_pn[i]+list_pn[i-1])/2*(list_radius[i]-list_radius[i-1])
                     
-            P+=omega*B*pt*r*(list(blade[0])[-2]-list(blade[0])[-1])   # for last element
-            T+=B*pn*(list(blade[0])[-2]-list(blade[0])[-1])           # for last element
+            P+=omega*B*list_pt[-1]/2*r*(list(blade[0])[-1]-list(blade[0])[-2])   # for last element
+            T+=B*list_pt[-1]/2*(list(blade[0])[-1]-list(blade[0])[-2])           # for last element
             CP=P/(0.5*rho*V0**3*np.pi*R**2)
             Z[k1][k2]=CP
            
@@ -216,8 +216,8 @@ def question_one(x,y,V0,ac,eps,max_iteration):
 # R=89.17
 # rho=1.225
 # ac=1/3 # 1/3 for Glauert, 0.2 for Wilson&Walker
-# x=np.arange(7,8,0.05)
-# y=np.arange(-0.6,-0.3,0.01)
+# x=np.arange(7.8,8.2,0.01)
+# y=np.arange(-0.1,0.3,0.01)
 
 # question_one(x,y,V0,ac,eps,max_iteration)
 
@@ -316,7 +316,7 @@ def question_two(list_chord,TSR_max, theta_p_max,r,B,ac,eps,max_iteration):
             y=list_cp[:,1]*180/np.pi, # vertical axis
             marker=dict(color="black", size=10),
             name="Beta"
-        ))
+        ), secondary_y=True)
     
     fig.add_trace(
         go.Scatter(
@@ -339,10 +339,10 @@ def question_two(list_chord,TSR_max, theta_p_max,r,B,ac,eps,max_iteration):
 # ac=1/3
 # max_iteration = 10000
 # r = 71.97
-# TSR=7.75
-# theta_p=-0.45
+# TSR=8.01
+# theta_p=0.09
 # B=3
-# list_chord=np.arange(2.7,3.1,0.01)
+# list_chord=np.arange(0,3.1,0.01)
 # question_two(list_chord=list_chord,
 #             TSR_max=TSR,
 #             theta_p_max=theta_p,
@@ -384,9 +384,9 @@ def question_3(TSR_max,P_max, CP_max):
     
 # R=89.17
 # rho=1.225
-# CP_max =  0.498
+# CP_max =  0.495
 # P_max = 10.64e6
-# TSR_max=7.75
+# TSR_max=8.01
 
 # question_3(TSR_max,P_max,CP_max)
 
@@ -397,7 +397,7 @@ V0_rated =11.177
 omega_max = 9.277
 """
 
-def question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,power_max,TSR_max): 
+def find_theta_p(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,power_max,TSR_max): 
     
 
     blade=pd.read_csv('bladedat.txt',delimiter='\t',header=None)
@@ -419,7 +419,7 @@ def question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,po
             
             theta_p*=np.pi/180
             P,T=0,0
-
+            list_pt,list_pn=[],[]
             for i,r in enumerate(list_radius) :
                 
                 c=list(blade[2].loc[blade[0]==r])[0]
@@ -433,37 +433,112 @@ def question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,po
                 
                 Vrel=np.sqrt((V0-a*V0)**2+((a_prime+1)*omega*r)**2)
 
-                pn=0.5*rho*Vrel**2*c*Cn
-                pt=0.5*rho*Vrel**2*c*Ct
+                list_pn.append(0.5*rho*Vrel**2*c*Cn)
+                list_pt.append(0.5*rho*Vrel**2*c*Ct)
                 
                 if i==0:
-                    P=omega*B*pt*r*(list_radius[i]-0)
-                    T=B*pn*(list_radius[i]-0)
+                    P=omega*B*list_pt[0]/2*r*(list_radius[i]-0)
+                    T=B*list_pn[0]/2*(list_radius[i]-0)
 
                 else :
-                    P+=omega*B*pt*r*(list_radius[i]-list_radius[i-1])
-                    T+=B*pn*(list_radius[i]-list_radius[i-1])
+                    P+=omega*B*(list_pt[i]+list_pt[i-1])/2*r*(list_radius[i]-list_radius[i-1])
+                    T+=B*(list_pn[i]+list_pn[i-1])/2*(list_radius[i]-list_radius[i-1])
                     
-            P+=omega*B*pt*r*(list(blade[0])[-2]-list(blade[0])[-1])   # for last element
-            T+=B*pn*(list(blade[0])[-2]-list(blade[0])[-1])           # for last element
+            P+=omega*B*list_pt[-1]/2*r*(list(blade[0])[-1]-list(blade[0])[-2])   # for last element
+            T+=B*list_pt[-1]/2*(list(blade[0])[-1]-list(blade[0])[-2])           # for last element
             CP=P/(0.5*rho*V0**3*np.pi*R**2)
             CT=T/(0.5*rho*V0**2*np.pi*R**2)
-            if CP>CP_V0 and P<P_max:
+            if CP>CP_V0 and P<power_max:
                 CP_V0=CP
                 P_V0=P
                 CT_V0=CT
-                T_V0=CT
+                T_V0=T
                 theta_p_V0=theta_p*180/np.pi
         print(V0,theta_p_V0,T_V0,P_V0,CT_V0,CP_V0)
         list_result.append([V0,theta_p_V0,T_V0,P_V0,CT_V0,CP_V0])
-            #list_cp.append([TSR,theta_p,CP,P])
-    #return(list_cp)
+    return(np.array(list_result))
 
     list_result=np.array(list_result)
 
+def question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max):
+    
+    list_result=find_theta_p(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max)
+
     fig = make_subplots()
     
+    fig.add_trace(
+        go.Scatter(
+            x=list_result[:,0], # horizontal axis
+            y=list_result[:,1], # vertical axis
+            marker=dict(color="black", size=10),
+            name="Pitch angle (°)"
+        ))
+
+    fig.update_layout(title_text="Pitch angle")
+    fig.update_xaxes(title_text="Wind speed V0 (m/s)")
+    fig.update_yaxes(title_text="Pitch angle (°)")
     
+    fig.show()
+
+    
+
+    fig = make_subplots()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=list_result[:,0], # horizontal axis
+            y=list_result[:,2], # vertical axis
+            marker=dict(color="black", size=10),
+            name="Thrust"
+        ))
+
+    fig.update_layout(title_text="Thrust")
+    fig.update_xaxes(title_text="Wind speed V0 (m/s)")
+    fig.update_yaxes(title_text="Thrust (N)")
+    
+    fig.show()
+
+    fig = make_subplots()
+
+    fig.add_trace(
+        go.Scatter(
+            x=list_result[:,0], # horizontal axis
+            y=list_result[:,3], # vertical axis
+            marker=dict(color="black", size=10),
+            name="Power"
+        ))
+    
+    fig.update_layout(title_text="Power")
+    fig.update_xaxes(title_text="Wind speed V0 (m/s)")
+    fig.update_yaxes(title_text="Power (W)")
+    
+    fig.show()
+
+
+    fig = make_subplots()
+    
+    fig.add_trace(
+        go.Scatter(
+            x=list_result[:,0], # horizontal axis
+            y=list_result[:,4], # vertical axis
+            marker=dict(color="black", size=10),
+            name="CT"
+        ))
+    
+    fig.add_trace(
+        go.Scatter(
+            x=list_result[:,0], # horizontal axis
+            y=list_result[:,5], # vertical axis
+            marker=dict(color="black", size=10),
+            name="CP"
+        ))
+
+    fig.update_layout(title_text="Coefficients")
+    fig.update_xaxes(title_text="Wind speed V0 (m/s)")
+    fig.update_yaxes(title_text="Coefficient")
+    
+    fig.show()
+
     return(list_result)
 
 R=89.17
@@ -472,11 +547,32 @@ ac=1/3
 max_iteration = 10000
 B=3
 rho=1.225
-CP_max =  0.498
+CP_max =  0.495
 P_max = 10.64e6
-TSR_max=7.75
-V0_rated =11.177 
-omega_max = 9.277
-list_V0=np.arange(4,25,1)
+TSR_max=8.01
+V0_rated =11.200 
+omega_max = 9.607
+list_V0=np.arange(4,26,1)
 list_theta_p=np.arange(-1,25.1,0.1)
-print(question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max*np.pi/30,P_max,TSR_max))
+question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max*np.pi/30,P_max,TSR_max)
+
+def question_6(A,k,list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max):
+
+    list_result=find_theta_p(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max)
+    wind_speed=list_result[:,0]
+    power=list_result[:,3]
+
+    f=np.zeros(len(wind_speed)-1)
+    H=np.zeros(len(wind_speed)-1)
+    AEO=np.zeros(len(wind_speed)-1)
+
+    for i in range(len(wind_speed)-1) :
+        f[i]=np.exp(-(wind_speed[i]/A)**k)-np.exp(-(wind_speed[i+1]/A)**k)
+        H[i]=8760*f[i]
+        AEO[i]=0.5*(power[i]+power[i+1])*H[i]
+
+    return(f,H,np.sum(AEO))
+
+# A=9
+# k=1.9
+# print(question_6(A,k,list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max*np.pi/30,P_max,TSR_max))

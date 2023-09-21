@@ -333,31 +333,7 @@ def question_two(list_chord,TSR_max, theta_p_max,r,B,ac,eps,max_iteration):
 
     fig.show()
 
-# R=89.17
-# rho=1.225
-# eps=1e-5
-# ac=1/3
-# max_iteration = 10000
-# r = 71.97
-# TSR=8.01
-# theta_p=0.09
-# B=3
-# list_chord=np.arange(0,3.1,0.01)
-# question_two(list_chord=list_chord,
-#             TSR_max=TSR,
-#             theta_p_max=theta_p,
-#             r=r,
-#             B=B,
-#             ac=ac,eps=eps,max_iteration=max_iteration)
 
-"""
-Results
-
-c = 2.9m
-beta = -1.09 °
-dCP = 0.5259
-
-"""
 
 def question_3(TSR_max,P_max, CP_max):
     V0_rated = np.cbrt(P_max/(0.5*rho*np.pi*R**2*CP_max))
@@ -382,20 +358,7 @@ def question_3(TSR_max,P_max, CP_max):
     fig.update_yaxes(title_text="Rotational speed (rpm)")
     fig.show()
     
-# R=89.17
-# rho=1.225
-# CP_max =  0.495
-# P_max = 10.64e6
-# TSR_max=8.01
 
-# question_3(TSR_max,P_max,CP_max)
-
-"""
-Results
-
-V0_rated =11.177 
-omega_max = 9.277
-"""
 
 def find_theta_p(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,power_max,TSR_max): 
     
@@ -463,6 +426,9 @@ def find_theta_p(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,
 def question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max):
     
     list_result=find_theta_p(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max)
+
+    Res=pd.DataFrame(list_result,columns=['Wind speed','Pitch angle','T','P','CT','CP'])
+    Res.to_excel('Q4.xlsx',index=False)
 
     fig = make_subplots()
     
@@ -541,20 +507,6 @@ def question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_
 
     return(list_result)
 
-R=89.17
-eps=1e-5
-ac=1/3
-max_iteration = 10000
-B=3
-rho=1.225
-CP_max =  0.495
-P_max = 10.64e6
-TSR_max=8.01
-V0_rated =11.200 
-omega_max = 9.607
-list_V0=np.arange(4,26,1)
-list_theta_p=np.arange(-1,25.1,0.1)
-question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max*np.pi/30,P_max,TSR_max)
 
 def question_6(A,k,list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max,P_max,TSR_max):
 
@@ -573,6 +525,86 @@ def question_6(A,k,list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_ma
 
     return(f,H,np.sum(AEO))
 
-# A=9
-# k=1.9
-# print(question_6(A,k,list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max*np.pi/30,P_max,TSR_max))
+eps=1e-10
+max_iteration=10000
+V0=8
+B=3
+R=89.17
+rho=1.225
+ac=1/3 # 1/3 for Glauert, 0.2 for Wilson&Walker
+x=np.arange(7.8,8.2,0.01)
+y=np.arange(-0.1,0.3,0.01)
+
+question_one(x,y,V0,ac,eps,max_iteration)
+
+""" 
+
+Results 
+
+G correction
+CP_max =0.495
+TSR_max = 8.01 +/- 0.01
+theta_p_max = 0.09 +/- 0.01
+
+W&W
+CP_max =0.563 
+TSR_max = 8.400 +/- 0.05
+theta_p_max = -3.000 +/- 0.05
+
+"""
+
+R=89.17
+rho=1.225
+eps=1e-5
+ac=1/3
+max_iteration = 10000
+r = 71.97
+TSR=8.01
+theta_p=0.09
+B=3
+list_chord=np.arange(0,3.1,0.01)
+question_two(list_chord=list_chord,
+            TSR_max=TSR,
+            theta_p_max=theta_p,
+            r=r,
+            B=B,
+            ac=ac,eps=eps,max_iteration=max_iteration)
+
+"""
+Results
+
+c = 2.89m
+beta = -1.07 °
+dCP = 0.524
+
+"""
+
+R=89.17
+rho=1.225
+CP_max =  0.495
+P_max = 10.64e6
+TSR_max=8.01
+
+question_3(TSR_max,P_max,CP_max)
+
+"""
+Results
+
+V0_rated =11.200 
+omega_max = 9.607
+"""
+
+R=89.17
+eps=1e-5
+ac=1/3
+max_iteration = 10000
+B=3
+rho=1.225
+CP_max =  0.495
+P_max = 10.64e6
+TSR_max=8.01
+V0_rated =11.200 
+omega_max = 9.607
+list_V0=np.arange(4,26,1)
+list_theta_p=np.arange(-1,25.1,0.1)
+question_4(list_V0,list_theta_p,B,ac,eps,max_iteration,V0_rated,omega_max*np.pi/30,P_max,TSR_max)

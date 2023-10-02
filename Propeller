@@ -1,1 +1,147 @@
 
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Sep 28 09:27:07 2023
+
+@author: abdul
+"""
+
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Constants
+PP = 22  # [kW] Motor
+omega = 2600 * 2 * np.pi / 60  # [rad/s]
+BB = 2  # number of blades
+RR = 0.69  # [m] radius of blade
+
+rr = np.array([0.200, 0.300, 0.400, 0.500, 0.600, 0.645, 0.690])  # [m]
+twist = np.array([23, 20, 16, 14.5, 13, 12.3, 11.7])  # [deg]
+chord = np.array([0.106, 0.117, 0.112, 0.103, 0.088, 0.082, 0.0])  # [m]
+
+
+# function cl(alpha) that calculates the lift coefficient (cl) based on the angle of attack (alpha) in degrees
+def cl(alpha):
+    return 0.1 * alpha + 0.4  # Lift coefficient
+
+cd = 0.008
+
+rho = 1.225  # [kg/m^3]
+Vin = 1  # [m/s] minimum speed
+Voff = 40  # [m/s] maximum speed
+vvect = np.arange(Vin, Voff + 1)  # vector of the speeds
+epsilon = 1e-4
+iter_max = 1e4
+beta = 0.1
+
+# Initialize arrays to store results
+phi_save = np.zeros(len(rr))
+cl_save = np.zeros(len(rr))
+cd_save = np.zeros(len(rr))
+Cn_save = np.zeros(len(rr))
+Ct_save = np.zeros(len(rr))
+aa_save = np.zeros(len(rr))
+aa_prime_save = np.zeros(len(rr))
+Vrel = np.zeros(len(rr))
+pt = np.zeros(len(rr))
+pn = np.zeros(len(rr))
+thrust = np.zeros(len(vvect))
+power = np.zeros(len(vvect))
+
+# Calculate thrust and power for different speeds of the boat
+
+for vv in range(len(vvect)): # outer loop iterates through a range of boat speeds
+    Vel = vvect[vv]
+    for ii in range(len(rr) - 1): # inner loop  iterates through a range of radial positions # -1 ensures that the loop does not go beyond the last element of rr
+        icount = 0
+        kk = 0
+        
+        # axial and tangential induction factors
+        aa = 0
+        aa_prime = 0
+        sigma = chord[ii] * BB / (2 * rr[ii] * np.pi)  # solidity [-]
+
+        while kk == 0 and icount < iter_max:
+            icount += 1
+            
+            # Pitch angle
+            phi = np.arctan(((1 + aa) * Vel) / ((1 - aa_prime) * omega * rr[ii]))  # rad
+            
+            
+            FF = 2 / np.pi * np.arccos(np.exp(-BB / 2 * (RR - rr[ii]) / (rr[ii] * np.sin(np.abs(phi)))))
+            
+            alpha = np.deg2rad(twist[ii]) - phi  # rad
+            
+            clift = cl(np.rad2deg(alpha))
+            
+            cdrag = cd
+            
+            Cn = clift * np.cos(phi) - cdrag * np.sin(phi)
+            
+            Ct = clift * np.sin(phi) + cdrag * np.cos(phi)
+            
+            astar = (1 + aa) * ((sigma*Cn) / (4*FF*((np.sin(phi))**2)))
+            
+            aa_new = beta * astar + (1 - beta) * aa
+
+            aprimestar = (1 - aa_prime) * ((sigma * Ct) / (4 * FF * (np.sin(phi) * np.cos(phi))))
+            
+            aa_prime_new = beta * aprimestar + (1 - beta) * aprimestar
+
+            if np.abs(aa_new - aa) < epsilon:
+                kk = 1
+                phi_save[ii] = phi
+                cl_save[ii] = clift
+                cd_save[ii] = cdrag
+                Cn_save[ii] = Cn
+                Ct_save[ii] = Ct
+                aa_save[ii] = aa_new
+                aa_prime_save[ii] = aa_prime_new
+            else:
+                kk = 0
+                aa = aa_new
+                aa_prime = aa_prime_new
+
+        # local relative velocity
+        Vrel[ii] = Vel * (1 + aa_save[ii]) / np.sin(phi_save[ii])  # [m/s]
+        
+        # Tangential load for each blade section
+        pt[ii] = -0.5 * rho * Vrel[ii] ** 2 * chord[ii] * Ct_save[ii]
+        
+        # Thrust 
+        pn[ii] = -0.5 * rho * Vrel[ii] ** 2 * chord[ii] * Cn_save[ii]
+
+    # the last element corresponds to a position on the blade that doesn't contribute to thrust or normal force.
+    pt[-1] = 0
+    pn[-1] = 0
+
+    # torque, thrust, and power for the entire propeller
+    torque = BB * np.trapz(rr, rr * pt) / 1000  # [kN*m]
+    thrust[vv] = BB * np.trapz(rr, pn) / 1000  # [kN]
+    power[vv] = omega * torque  # [kW]
+
+# Calculate Cp and CTT
+Cp = power * 1000 / (0.5 * rho * Vel ** 3 * np.pi * RR ** 2)  
+CTT = thrust * 1000 / (0.5 * rho * Vel ** 2 * np.pi * RR ** 2)  
+
+# Plot thrust and power
+plt.figure(1)
+plt.plot(vvect, power)
+plt.grid(True)
+plt.box(True)
+plt.xlabel('V_b [m/s]')
+plt.ylabel('P [kW]')
+
+# Question 3: Velocity of the swamp boat
+DD = 2.44 * vvect ** 2
+
+plt.figure(2)
+plt.plot(vvect, thrust * 1000)
+plt.plot(vvect, DD, '--')
+plt.grid(True)
+plt.box(True)
+plt.xlabel('V_b [m/s]')
+plt.ylabel('T and N [N]')
+plt.legend(['Thrust', 'Drag'])
+
+plt.show()

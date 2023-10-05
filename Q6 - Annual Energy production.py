@@ -1,14 +1,13 @@
-
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.integrate import quad
 
 # parameters dereived from the BEM calculations
-V_r = 11.177
+V_r = 11.403
 rho_air = 1.225
 D = 89.17*2
 A_rotor = np.pi*(D/2)**2
-C_P = 0.498
+C_P = 0.468
 P_0 = 10.64e6
 A = 9
 k = 1.9
@@ -106,25 +105,23 @@ f_25 = [f(v) if v <= V_cut_off_25 else 0.0 for v in V]
 V_cut_off_20 = 20
 f_20 = [f(v) if v <= V_cut_off_20 else 0.0 for v in V]
 
-# Plot the Weibull PDFs
+
+plt.figure(figsize=(10, 6))  
+
+
 plt.plot(V, f_25, label=f'Weibull PDF (V_cut_off={V_cut_off_25} m/s)')
 plt.plot(V, f_20, label=f'Weibull PDF (V_cut_off={V_cut_off_20} m/s)')
 
-plt.title('Weibull PDFs at Different Wind Speed Cutoffs')
-plt.xlabel('Wind speed (m/s)')
-plt.ylabel('Probability density')
-plt.legend()
+
+plt.legend([f'Weibull PDF (V_cut_off={V_cut_off_25} m/s , A=9, k=1.9)',
+            f'Weibull PDF (V_cut_off={V_cut_off_20} m/s, A=9, k=1.9)'], fontsize=15)
+plt.title('Weibull PDFs at Different Wind Speed Cutoffs', fontsize=17)
+plt.xlabel('Wind speed (m/s)', fontsize=17)
+plt.ylabel('Probability density', fontsize=17)
+
+# Increase the font size of the x-axis and y-axis labels
+plt.xticks(fontsize=17)
+plt.yticks(fontsize=17)
+
+plt.savefig('weibull_pdfs.png', dpi=300)
 plt.show()
-
-
-
-
-
-
-
-
-
-
-
-
-
